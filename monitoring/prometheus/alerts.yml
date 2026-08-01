@@ -1,0 +1,66 @@
+groups:
+  - name: api-slo-alerts
+    rules:
+      - alert: HighErrorRateFastBurn
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) /
+            clamp_min(sum(rate(http_requests_total[5m])), 1)
+          ) > (0.005 * 14.4)
+          and
+          (
+            sum(rate(http_requests_total{status=~"5.."}[1h])) /
+            clamp_min(sum(rate(http_requests_total[1h])), 1)
+          ) > (0.005 * 14.4)
+        for: 2m
+        labels:
+          severity: page
+          slo: error-budget
+          burn_rate: fast
+        annotations:
+          summary: "Fast burn on 5xx error budget"
+          description: "5xx rate is consuming the 7-day 0.5% error budget too quickly."
+          runbook: "https://wiki/runbook/api-errors"
+
+      - alert: HighErrorRateSlowBurn
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[30m])) /
+            clamp_min(sum(rate(http_requests_total[30m])), 1)
+          ) > (0.005 * 6)
+          and
+          (
+            sum(rate(http_requests_total{status=~"5.."}[6h])) /
+            clamp_min(sum(rate(http_requests_total[6h])), 1)
+          ) > (0.005 * 6)
+        for: 30m
+        labels:
+          severity: ticket
+          slo: error-budget
+          burn_rate: slow
+        annotations:
+          summary: "Slow burn on 5xx error budget"
+          description: "Sustained 5xx rate is burning error budget over long windows."
+          runbook: "https://wiki/runbook/api-errors"
+
+      - alert: HighPostLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(
+              rate(
+                http_request_duration_seconds_bucket{
+                  method="POST",
+                  route=~"/feeds/\\{feed_id\\}/fetch|/articles/\\{article_id\\}/summarize"
+                }[5m]
+              )
+            ) by (le, route)
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: page
+          slo: latency
+        annotations:
+          summary: "p95 latency over SLO on POST endpoints"
+          description: "p95 latency for write endpoints is above 500ms for 10 minutes."
+          runbook: "https://wiki/runbook/api-latency"
