@@ -94,4 +94,4 @@ Workflow file:
 
 ## CI Smoke Test
 
-This line is a small non-functional change to trigger CI/CD validation.
+This line is another tiny non-functional change to trigger CI/CD validation.
