@@ -31,7 +31,10 @@ jobs:
             .
 
       - name: SSH deploy
-        if: ${{ secrets.HOST != '' && secrets.SSH_KEY != '' }}
+        env:
+          SSH_HOST: ${{ secrets.HOST }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        if: ${{ env.SSH_HOST != '' && env.SSH_KEY != '' }}
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.HOST }}
