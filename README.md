@@ -91,3 +91,7 @@ Default services:
 
 Workflow file:
 - `.github/workflows/deploy.yml`
+
+## CI Smoke Test
+
+This line is a small non-functional change to trigger CI/CD validation.
