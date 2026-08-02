@@ -12,19 +12,20 @@ SYSTEM_PROMPT = (
     "Пиши краткие саммари новостей на русском языке: 3–4 предложения, "
     "только ключевые факты, без воды и субъективных оценок."
 )
+LOCAL_FALLBACK_PREFIX = "[LOCAL_FALLBACK] "
 
 
 def build_local_summary(title: str, content: str) -> str:
     cleaned_content = re.sub(r"\s+", " ", content).strip()
     if not cleaned_content:
-        return f"{title}: summary unavailable."
+        return f"{LOCAL_FALLBACK_PREFIX}{title}: summary unavailable."
 
     preview = cleaned_content[:320]
     if "." in preview:
         sentences = re.split(r"(?<=[.!?])\s+", preview)
         preview = " ".join(sentences[:2]).strip()
 
-    return f"{title}. {preview}"
+    return f"{LOCAL_FALLBACK_PREFIX}{title}. {preview}"
 
 
 async def summarize_with_gemini(title: str, content: str) -> str:
