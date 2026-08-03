@@ -1,3 +1,6 @@
+import re
+from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,17 +25,23 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-def to_async_database_url(database_url: str) -> str:
-    """Normalize common Postgres URL formats to SQLAlchemy asyncpg format."""
+def to_async_database_url(database_url: str) -> tuple[str, bool]:
+    """Normalize Postgres URL to SQLAlchemy asyncpg format.
+
+    Returns (url, ssl_required) — caller should pass ssl=True to connect_args
+    when ssl_required is True.
+    """
     if database_url.startswith("postgres://"):
         database_url = "postgresql+asyncpg://" + database_url[len("postgres://"):]
     elif database_url.startswith("postgresql://"):
         database_url = "postgresql+asyncpg://" + database_url[len("postgresql://"):]
 
-    # asyncpg does not support sslmode; replace with ssl=true
-    database_url = database_url.replace("sslmode=require", "ssl=true")
-    database_url = database_url.replace("sslmode=prefer", "ssl=true")
-    database_url = database_url.replace("sslmode=verify-full", "ssl=true")
-    database_url = database_url.replace("sslmode=disable", "")
-
-    return database_url
+    # Strip all ssl/sslmode query params — passed via connect_args instead
+    parsed = urlparse(database_url)
+    params = parse_qs(parsed.query, keep_blank_values=True)
+    sslmode = params.pop("sslmode", ["disable"])[0]
+    params.pop("ssl", None)
+    ssl_required = sslmode in ("require", "verify-ca", "verify-full", "prefer", "allow")
+    new_query = urlencode({k: v[0] for k, v in params.items()})
+    clean_url = urlunparse(parsed._replace(query=new_query))
+    return clean_url, ssl_required
