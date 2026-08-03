@@ -69,6 +69,7 @@ Default services:
 ## Deploy to Render
 
 - This repository includes `render.yaml` for one-click Blueprint deploy.
+- This line is a small redeploy marker for Render validation.
 - Web service uses `Dockerfile`, runs `alembic upgrade head` on startup, then starts Uvicorn on Render's `PORT`.
 - Render Postgres `connectionString` is accepted as-is (`postgres://` / `postgresql://`) and normalized to async SQLAlchemy URL in app settings.
 
