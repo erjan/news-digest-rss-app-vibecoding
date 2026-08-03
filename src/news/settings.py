@@ -25,7 +25,14 @@ settings = Settings()
 def to_async_database_url(database_url: str) -> str:
     """Normalize common Postgres URL formats to SQLAlchemy asyncpg format."""
     if database_url.startswith("postgres://"):
-        return "postgresql+asyncpg://" + database_url[len("postgres://"):]
-    if database_url.startswith("postgresql://"):
-        return "postgresql+asyncpg://" + database_url[len("postgresql://"):]
+        database_url = "postgresql+asyncpg://" + database_url[len("postgres://"):]
+    elif database_url.startswith("postgresql://"):
+        database_url = "postgresql+asyncpg://" + database_url[len("postgresql://"):]
+
+    # asyncpg does not support sslmode; replace with ssl=true
+    database_url = database_url.replace("sslmode=require", "ssl=true")
+    database_url = database_url.replace("sslmode=prefer", "ssl=true")
+    database_url = database_url.replace("sslmode=verify-full", "ssl=true")
+    database_url = database_url.replace("sslmode=disable", "")
+
     return database_url
