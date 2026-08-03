@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 import news.models  # noqa: F401
 from alembic import context
 from news.database import Base
-from news.settings import settings
+from news.settings import settings, to_async_database_url
 
 config = context.config
 
@@ -18,7 +18,8 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 if settings.database_url:
-    config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+    database_url = to_async_database_url(settings.database_url)
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:

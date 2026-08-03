@@ -66,6 +66,17 @@ Default services:
 - Prometheus: `127.0.0.1:9090`
 - Alertmanager: `127.0.0.1:9093`
 
+## Deploy to Render
+
+- This repository includes `render.yaml` for one-click Blueprint deploy.
+- Web service uses `Dockerfile`, runs `alembic upgrade head` on startup, then starts Uvicorn on Render's `PORT`.
+- Render Postgres `connectionString` is accepted as-is (`postgres://` / `postgresql://`) and normalized to async SQLAlchemy URL in app settings.
+
+Required env vars on Render:
+- `DATABASE_URL` (from Render Postgres)
+- `GEMINI_API_KEY` or `GOOGLE_API_KEY` (optional, for Gemini summaries)
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (optional, for Telegram notifications)
+
 ## Main API Endpoints
 
 - `POST /feeds/` — add RSS feed
