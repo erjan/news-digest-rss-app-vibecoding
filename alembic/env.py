@@ -18,7 +18,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 if settings.database_url:
-    database_url = to_async_database_url(settings.database_url)
+    database_url, _ssl_required = to_async_database_url(settings.database_url)
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 
