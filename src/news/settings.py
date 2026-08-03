@@ -20,3 +20,12 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def to_async_database_url(database_url: str) -> str:
+    """Normalize common Postgres URL formats to SQLAlchemy asyncpg format."""
+    if database_url.startswith("postgres://"):
+        return "postgresql+asyncpg://" + database_url[len("postgres://"):]
+    if database_url.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + database_url[len("postgresql://"):]
+    return database_url
