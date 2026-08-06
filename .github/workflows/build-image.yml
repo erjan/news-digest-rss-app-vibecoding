@@ -29,5 +29,5 @@ jobs:
           docker buildx build \
             --push \
             --tag ghcr.io/${{ github.repository }}:cloud-image \
-            --tag ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            --tag ghcr.io/${{ github.repository }}:latest \
             .
