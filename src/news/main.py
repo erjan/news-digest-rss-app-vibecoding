@@ -36,8 +36,10 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown(wait=False)
 
 
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="News Digest API", version="1.0", lifespan=lifespan)
+    app = FastAPI(title="News Digest API 🚀 Quay", version="1.0", lifespan=lifespan)
     configure_tracing(app, engine)
     configure_metrics(app)
     app.include_router(feeds.router)
