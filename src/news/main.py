@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="News Digest API 🚀 1234!", version="1.0", lifespan=lifespan)
+    app = FastAPI(title="News Digest API 🚀 1234xxx!", version="1.0", lifespan=lifespan)
     configure_tracing(app, engine)
     configure_metrics(app)
     app.include_router(feeds.router)
