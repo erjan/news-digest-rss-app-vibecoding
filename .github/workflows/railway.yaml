@@ -1,4 +1,4 @@
-name: Deploy to Railway
+name: Deploy to Railway via GHCR
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   packages: write
 
 jobs:
-  deploy:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -33,10 +33,3 @@ jobs:
             --tag ghcr.io/${{ github.repository }}:${{ github.sha }} \
             --tag ghcr.io/${{ github.repository }}:latest \
             .
-
-      - name: Install Railway CLI and Deploy
-        run: |
-          npm i -g @railway/cli
-          railway deploy
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
