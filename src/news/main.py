@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="News Digest API railway edition! ha 1234 added to signal change", version="1.0", lifespan=lifespan)
+    app = FastAPI(title="News Digest API railway edition! ha 1234 added to signal change 2nd FLAG", version="1.0", lifespan=lifespan)
     configure_tracing(app, engine)
     configure_metrics(app)
     app.include_router(feeds.router)
