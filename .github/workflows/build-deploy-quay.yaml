@@ -31,3 +31,6 @@ jobs:
             --tag quay.io/hivauz/news-digest-fast-api:${{ github.sha }} \
             --tag quay.io/hivauz/news-digest-fast-api:latest \
             .
+      - name: Trigger Northflank Deployment
+        run: |
+          curl -X GET "${{ secrets.NF_WEBHOOK }}?image_tag=${{ github.sha }}"
