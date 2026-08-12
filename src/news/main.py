@@ -29,7 +29,7 @@ def initialize_scheduler() -> None:
 async def lifespan(app: FastAPI):
     """Startup and shutdown events for the app."""
     configure_logging()
-    log.info("app_starting", app_name="News Digest API north flank + quay4", version="1.0")
+    log.info("app_starting", app_name="News Digest API", version="1.0")
     initialize_scheduler()
     yield
     log.info("app_stopping")
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="News Digest API 🚀 1234xxx!", version="1.0", lifespan=lifespan)
+    app = FastAPI(title="News Digest API 🚀 north flank + quay edition!", version="1.0", lifespan=lifespan)
     configure_tracing(app, engine)
     configure_metrics(app)
     app.include_router(feeds.router)
