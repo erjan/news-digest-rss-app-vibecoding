@@ -1,0 +1,570 @@
+
+BASIC prompt:
+
+**Smart News Digest.** A user subscribes to RSS feeds. The service checks them hourly, saves new articles to a database, and generates a summary for each using GPT-4o-mini. The API allows fetching a feed of the latest articles with summaries, filtering by source, and searching text.
+
+### Architecture
+
+Top-to-bottom layers:
+
+* **API layer (`routers/`):** FastAPI endpoints. Parse requests and return responses.
+* **Service layer (`services/`):** Business logic. Knows what to do, but doesn't know HTTP or database details.
+* **Data layer (`crud.py`, `models.py`):** Database access. SQLAlchemy queries.
+* **Integration layer (`integrations/`):** External services. OpenAI, RSS parsing.
+* **Background tasks (`tasks/`):** Cron jobs. Executed on a schedule.
+
+### API Endpoints
+
+Basic endpoints:
+
+* `POST /feeds` – Add an RSS feed
+* `GET /feeds` – List feeds
+* `DELETE /feeds/{id}` – Delete a feed
+* `GET /articles` – Article feed with filters
+* `GET /articles/{id}` – Article details
+* `POST /search` – Semantic search
+* `POST /digest/run` – Generate a daily digest
+
+Every endpoint is async, using Pydantic schemas, validation, and error handling.
+
+### Background Tasks
+
+APScheduler runs tasks on a schedule:
+
+* **Every hour:** Fetch all active RSS feeds and save new articles
+* **Every 10 minutes:** Batch-generate summaries for articles without summaries
+* **Every day at 9 AM:** Send the digest to subscribed users
+
+---
+
+### Step 1: Project Initialization
+
+```bash
+uv init --lib news-digest
+cd news-digest
+uv add fastapi[standard] sqlalchemy[asyncio] asyncpg alembic pydantic-settings httpx feedparser apscheduler openai
+uv add --dev pytest pytest-asyncio pytest-cov httpx ruff mypy
+
+```
+
+Open in Cursor. Create `AGENTS.md` with rules (from the previous lesson).
+
+---
+
+### Step 2: Models and Migrations
+
+Cursor Composer prompt:
+
+> Create SQLAlchemy 2.0 async models in `src/news/models.py`:
+> **Feed:**
+> * `id` (PK), `url` (unique str 500), `title` (str 200)
+> * `last_fetched` (datetime nullable), `is_active` (bool default True)
+> * `created_at` (datetime default now)
+> * relationship `articles` back_populates="feed"
+> 
+> 
+> **Article:**
+> * `id` (PK), `feed_id` (FK feeds.id), `url` (unique str 500), `title` (str 500)
+> * `content` (text), `summary` (text nullable)
+> * `published_at` (datetime), `created_at` (datetime default now)
+> * relationship `feed` back_populates="articles"
+> 
+> 
+> Use `Mapped` and `mapped_column`. Create `Base` in `src/news/database.py`.
+
+Cursor will generate the files. Review the diff:
+
+* `Mapped[T]` syntax, not legacy `Column`
+* Relationships correctly defined
+* Reasonable `String` lengths
+
+Run migrations:
+
+```bash
+uv run alembic init alembic
+# Edit alembic/env.py to use Base from database.py
+uv run alembic revision --autogenerate -m "initial schema"
+uv run alembic upgrade head
+
+```
+
+---
+
+### Step 3: Pydantic Schemas
+
+> Create Pydantic v2 schemas in `src/news/schemas.py`:
+> * **FeedCreate:** `url` (str), `title` (str)
+> * **FeedRead:** `id`, `url`, `title`, `last_fetched`, `is_active`, `created_at`
+> * `ConfigDict(from_attributes=True)`
+> 
+> 
+> * **ArticleRead:** `id`, `feed_id`, `title`, `url`, `summary`, `published_at`
+> * `ConfigDict(from_attributes=True)`
+> 
+> 
+> * **ArticleSearchQuery:** `query` (str), `limit` (int default=10, le=50)
+> 
+> 
+
+---
+
+### Step 4: CRUD Functions
+
+> Create `src/news/crud.py` with async CRUD functions:
+> * `async def create_feed(db, data: FeedCreate) -> Feed`
+> * `async def list_feeds(db, active_only: bool = True) -> list[Feed]`
+> * `async def get_feed(db, feed_id: int) -> Feed | None`
+> * `async def delete_feed(db, feed_id: int) -> bool`
+> * `async def create_article(db, feed_id: int, data: dict) -> Article`
+> * `async def list_articles(db, feed_id: int | None = None, limit: int = 50) -> list[Article]`
+> * `async def find_article_by_url(db, url: str) -> Article | None`
+> * `async def update_article_summary(db, article_id: int, summary: str) -> None`
+> 
+> 
+> Use SQLAlchemy 2.0 style: `select()`, `session.scalars()`, `await commit`.
+
+---
+
+### Step 5: OpenAI Integration
+
+> Create `src/news/integrations/openai_client.py`:
+> ```python
+> from openai import AsyncOpenAI
+> 
+> ```
+> 
+> 
+
+> client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+> async def summarize_article(title: str, content: str) -> str:
+> # Generates a concise 3-4 sentence summary via gpt-4o-mini
+> # max_tokens=200, temperature=0.3
+> # System prompt for concise news summaries in Russian
+> # Truncate content to 3000 characters
+> ```
+> 
+> ```
+> 
+> 
+
+---
+
+### Step 6: RSS Parser
+
+> Create `src/news/services/rss_fetcher.py`:
+> ```python
+> import feedparser
+> 
+> ```
+> 
+> 
+
+> async def fetch_feed(url: str) -> list[dict]:
+> # Parses RSS, returns list[dict] with fields:
+> # url, title, content (taken from description or content in RSS), published_at (datetime UTC)
+> # Uses asyncio.to_thread for blocking feedparser
+> # Handles parsing errors, returns [] on failure
+> ```
+> 
+> ```
+> 
+> 
+
+---
+
+### Step 7: Service Layer
+
+> Create `src/news/services/fetch_service.py`:
+> ```python
+> async def fetch_and_save(db, feed: Feed) -> int:
+>     # 1. Fetch articles via fetch_feed(feed.url)
+>     # 2. For each, check crud.find_article_by_url - does it already exist?
+>     # 3. If not - save via crud.create_article
+>     # 4. Finally update feed.last_fetched
+>     # 5. Return count of new articles
+> 
+> ```
+> 
+> 
+
+> async def summarize_pending(db, batch_size: int = 5) -> int:
+> # 1. Fetch articles without summary, limit batch_size
+> # 2. Call summarize_article for each
+> # 3. Save via crud.update_article_summary
+> # 4. Return processed count
+> ```
+> 
+> ```
+> 
+> 
+
+---
+
+### Step 8: Routers
+
+> Create `src/news/routers/feeds.py` and `src/news/routers/articles.py`:
+> **feeds:**
+> * `POST /` create (validates URL via httpx HEAD request, checks for 200)
+> * `GET /` list
+> * `DELETE /{id}` delete
+> 
+> 
+> **articles:**
+> * `GET /` list with pagination (`limit`, `offset`), `feed_id` filter
+> * `GET /{id}` details
+> * `POST /{id}/summarize` trigger summary manually if missing
+> 
+> 
+> Use `DbDep = Annotated[AsyncSession, Depends(get_db)]`. `response_model` everywhere.
+
+---
+
+### Step 9: `main.py`
+
+> Create `src/news/main.py`:
+> ```python
+> from fastapi import FastAPI
+> 
+> ```
+> 
+> 
+
+> app = FastAPI(title="News Digest API", version="1.0")
+> ```
+> 
+> Connect all routers (`feeds`, `articles`). Add `GET /health` endpoint. Add startup event to initialize APScheduler.
+> 
+> **Background tasks:**
+> *   **Every hour:** For each active feed, call `fetch_and_save`
+> *   **Every 10 minutes:** `summarize_pending(batch_size=5)`
+> 
+> ```
+> 
+> 
+
+---
+
+### Step 10: Running the Application
+
+```bash
+# .env
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost/news
+OPENAI_API_KEY=sk-...
+
+# Run Postgres locally via Docker
+docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres --name postgres-news postgres:16
+
+# Run migrations
+uv run alembic upgrade head
+
+# Launch server
+uv run fastapi dev src/news/main.py
+
+```
+
+---
+
+### Testing Pyramid for Our Project
+
+Adapting the classic pyramid for a FastAPI project:
+
+* **Unit Tests (70%)** – `pytest`, tests pure business logic without DB or network dependencies.
+* **Integration (20%)** – FastAPI `TestClient` + real Postgres inside Testcontainers; verifies HTTP endpoints and repository layers.
+* **Contract (5%)** – `schemathesis` or `dredd`, runs OpenAPI schemas against the live service.
+* **End-to-End (5%)** – `playwright` or `pytest-bdd` complete workflows (registration $\rightarrow$ resource creation $\rightarrow$ deletion).
+
+#### 2. Structure and Fixtures
+
+```python
+# conftest.py
+import pytest
+from app.db import get_session, init_models
+from app.main import create_app
+from httpx import ASGITransport, AsyncClient
+from testcontainers.postgres import PostgresContainer
+
+
+@pytest.fixture(scope="session")
+def pg():
+    with PostgresContainer("postgres:16-alpine") as c:
+        yield c
+
+
+@pytest.fixture()
+async def app(pg, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", pg.get_connection_url())
+    application = create_app()
+    await init_models()
+    yield application
+
+
+@pytest.fixture()
+async def client(app):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+```
+
+#### 3. Business Logic Unit Tests
+
+```python
+from app.domain.orders import Money, Order, OrderLine
+
+
+def test_order_total_sums_lines():
+    order = Order.new(
+        customer_id=1,
+        lines=[
+            OrderLine(product_id=1, qty=2, price=Money(100, "RUB")),
+            OrderLine(product_id=2, qty=1, price=Money(50, "RUB")),
+        ],
+    )
+    assert order.total == Money(250, "RUB")
+
+
+def test_order_cannot_be_empty():
+    import pytest
+
+    with pytest.raises(ValueError):
+        Order.new(customer_id=1, lines=[])
+
+```
+
+#### 4. Integration: TestClient + Testcontainers
+
+```python
+@pytest.mark.asyncio
+async def test_create_and_get_order(client):
+    payload = {"customer_id": 1, "lines": [{"product_id": 1, "qty": 2}]}
+    r = await client.post("/orders", json=payload)
+    assert r.status_code == 201
+    order_id = r.json()["id"]
+
+    r2 = await client.get(f"/orders/{order_id}")
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "awaiting_payment"
+
+```
+
+#### 5. Contract Testing via Schemathesis
+
+```python
+import schemathesis
+
+schema = schemathesis.from_uri("http://localhost:8000/openapi.json")
+
+
+@schema.parametrize()
+@schemathesis.check
+def test_api(case):
+    case.call_and_validate()
+
+```
+
+*Schemathesis generates requests based on your OpenAPI schema and ensures responses conform to specified schemas. A single test catches bug classes easily missed manually.*
+
+#### 6. Property-Based Testing for Critical Functions
+
+```python
+from app.domain.money import Money
+from hypothesis import given
+from hypothesis import strategies as st
+
+
+@given(
+    st.integers(min_value=0, max_value=10**9),
+    st.integers(min_value=0, max_value=10**9),
+)
+def test_money_addition_is_commutative(a, b):
+    assert Money(a, "RUB") + Money(b, "RUB") == Money(b, "RUB") + Money(a, "RUB")
+
+```
+
+#### 7. Coverage and Quality
+
+```bash
+pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+ruff check .
+mypy app/
+
+```
+
+---
+
+### Deployment
+
+#### 1. Multi-Stage Dockerfile
+
+```dockerfile
+FROM python:3.12-slim AS builder
+WORKDIR /app
+ENV PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1
+RUN pip install --upgrade pip uv
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+FROM python:3.12-slim AS runtime
+WORKDIR /app
+RUN useradd -m -u 1000 app
+COPY --from=builder /app/.venv /app/.venv
+COPY app /app/app
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
+USER app
+EXPOSE 8000
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s CMD curl -fsS http://localhost:8000/health || exit 1
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+
+```
+
+*Key highlights: non-root user, multi-stage build (saves hundreds of MBs in image size), orchestrator `HEALTHCHECK`, and `no-dev` dependencies in the final image.*
+
+#### 2. Production `docker-compose.yml`
+
+```yaml
+services:
+  app:
+    build: .
+    image: ghcr.io/me/python-final:${TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    depends_on: { db: { condition: service_healthy }, redis: { condition: service_started } }
+    ports: ["127.0.0.1:8000:8000"]
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_DB: app
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U app"], interval: 5s }
+    secrets: [db_password]
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+secrets:
+  db_password: { file: ./secrets/db_password }
+volumes: { pgdata: {} }
+
+```
+
+#### 3. Structured Logging via `structlog`
+
+```python
+import logging
+import sys
+import structlog
+
+logging.basicConfig(format="%(message)s", stream=sys.stdout, level=logging.INFO)
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer(),
+    ]
+)
+log = structlog.get_logger()
+
+log.info(
+    "order_created",
+    order_id=str(order.id),
+    customer_id=order.customer_id,
+    total=str(order.total),
+)
+
+```
+
+*JSON logs pipe to `stdout`, and onward to Loki/Promtail or Vector $\rightarrow$ Elastic. No `print`, no f-string logging: only structured keys.*
+
+#### 4. Prometheus Metrics
+
+```python
+from fastapi import FastAPI
+from prometheus_client import Counter, Histogram, make_asgi_app
+
+orders_created = Counter("orders_created_total", "Created orders", ["channel"])
+checkout_duration = Histogram(
+    "checkout_duration_seconds",
+    "Checkout latency",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5),
+)
+
+app = FastAPI()
+app.mount("/metrics", make_asgi_app())
+
+
+@checkout_duration.time()
+async def checkout(...):
+    ...
+    orders_created.labels(channel="web").inc()
+
+```
+
+#### 5. OpenTelemetry Tracing
+
+```python
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+provider = TracerProvider()
+provider.add_span_processor(
+    BatchSpanProcessor(
+        OTLPSpanExporter(
+            endpoint="http://otel-collector:4317", insecure=True
+        )
+    )
+)
+trace.set_tracer_provider(provider)
+FastAPIInstrumentor.instrument_app(app)
+SQLAlchemyInstrumentor().instrument(engine=engine)
+
+```
+
+*Every HTTP request automatically gets a span, and every SQL query gets a child span. Inspect distributed request traces inside Jaeger/Tempo.*
+
+#### 6. SLO and Alerting
+
+Agreement: **Error budget** — 5xx error share below 0.5% of total requests over 7 days. **p95 latency** for `POST /orders` < 500ms. Alerts via Alertmanager target SLO breaches using multi-burn-rate strategies rather than raw CPU/memory spikes.
+
+```yaml
+- alert: HighErrorRate
+  expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.005
+  for: 10m
+  labels: { severity: page }
+  annotations: { runbook: "https://wiki/runbook/api-errors" }
+
+```
+
+#### 7. CI/CD Deployment via GitHub Actions
+
+```yaml
+name: deploy
+on: { push: { branches: [main] } }
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: ${{ github.actor }}, password: ${{ secrets.GITHUB_TOKEN }} }
+      - run: docker buildx build --push --tag ghcr.io/${{ github.repository }}:${{ github.sha }} .
+      - name: ssh deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HOST }}
+          username: deploy
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /srv/app && TAG=${{ github.sha }} docker compose pull && docker compose up -d --no-deps app
+
+```

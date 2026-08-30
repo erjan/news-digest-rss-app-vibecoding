@@ -1,0 +1,15 @@
+problem: i can't follow all the news from 1 single webpage, including my local and global
+end user: me or anyone who wants to create his personal rss feed
+
+user value: all news in 1 place in my own ai-native page
+
+
+agent solution: harness using github copilot pro
+
+end 2 end quality: yes i find it valuable
+
+
+Measured
+Improvement: ai speeds up dev process 3x
+
+hot take insights: many PaaS platforms like north flank already have ai harness  and agentic ai
